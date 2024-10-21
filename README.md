@@ -1,3 +1,6 @@
+[//]: <> (Bir zamanlar bir kardeşimiz vardı, kendi render engine sini yapardı.)
+[//]: <> (Artık sadece huzur içinde yatsın diyebiliyoruz.)
+
 > ![citrus_logo11](https://user-images.githubusercontent.com/60492235/122637162-d3911e00-d0f5-11eb-8534-c1d7c1085e3b.png)
 # Citrus
 ### 3D renderer using DirectX 11 - C++11! Citrus only working on Windows 7+ for now :)
