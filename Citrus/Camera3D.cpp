@@ -9,10 +9,15 @@ Camera3D::Camera3D()
 	this->UpdateViewMatrix();
 }
 
-void Camera3D::SetProjectionValues(float fovDegrees, float aspectRatio, float nearZ, float farZ)
+void Camera3D::SetProjectionValues(float fovDegrees, float aspectRatio, float nearZ, float farZ, bool ortho)
 {
 	float fovRadians = (fovDegrees / 360.0f) * XM_2PI;
-	this->projectionMatrix = XMMatrixPerspectiveFovLH(fovRadians, aspectRatio, nearZ, farZ);
+	if (ortho)
+	{
+		this->projectionMatrix = XMMatrixOrthographicLH(3000.0f, 3000.0f, 0.1f, 6000.0f);
+	}
+	else
+		this->projectionMatrix = XMMatrixPerspectiveFovLH(fovRadians, aspectRatio, nearZ, farZ);
 }
 
 const XMMATRIX& Camera3D::GetViewMatrix() const

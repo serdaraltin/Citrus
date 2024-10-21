@@ -2,19 +2,29 @@
 
 static bool wireframeEnabled;
 static bool depthEnabled;
-static bool blurEnabled;
 static bool fogEnabled;
+static bool backfaceCulling;
+static bool frontfaceCulling;
+static bool frontCull;
 static float pos[3] = { 0,0,0 };
 static float rot[3] = { 0,0,0 };
 static float scale[3] = { 0.1f,0.1f,0.1f };
 
-bool GameObject::Init(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, std::string filepath, int width, int height, bool hasMaterial)
+GameObject::GameObject(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, std::string filepath, int width, int height, bool hasMaterial)
 {
 	this->pDevice = pDevice;
 	this->pContext = pContext;
-	//normal mapping vertex shader initialize
-	pVSNormal.Init(L"VSNormalMap.cso", pDevice);
-	pPSNormal.Init(L"PSNormalMap.cso", pDevice);
+	this->width = width;
+	this->height = height;
+	//normal mapping shaders initialize
+	pVSNormal.Init(L"VSDirectShadows.cso", pDevice);
+	pPSNormal.Init(L"PSDirectShadows.cso", pDevice);
+	//emssive mapping shaders initalize
+	pVSEmessive.Init(L"VSDirectShadowsEmessive.cso", pDevice);
+	pPSEmessive.Init(L"PSDirectShadowsEmessive.cso", pDevice);
+	//emssive mapping shaders initalize
+	pVSParallax.Init(L"VSDirectShadowsParallax.cso", pDevice);
+	pPSParallax.Init(L"PSDirectShadowsParallax.cso", pDevice);
 	//gets data from normal mapping vertex shader with input layout
 	const std::vector<D3D11_INPUT_ELEMENT_DESC> ied_normal =
 	{
@@ -29,6 +39,8 @@ bool GameObject::Init(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, std:
 	//create vertex shader
 	pVS.Init(L"PhongVS.cso", pDevice);
 	pPS.Init(L"PhongPSSpec.cso", pDevice);
+	pVSLit.Init(L"VSLit.cso", pDevice);
+	pPSLit.Init(L"PSLit.cso", pDevice);
 	//gets data form vertex shader with input layout
 	const std::vector<D3D11_INPUT_ELEMENT_DESC> ied =
 	{
@@ -38,8 +50,9 @@ bool GameObject::Init(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, std:
 	};
 	//create vertex shader i.l. and bind
 	pLayout = std::make_unique<InputLayout>(pDevice, ied, &pVS);
+	pLayoutLit = std::make_unique<InputLayout>(pDevice, ied, &pVSLit);
 	//model initialize
-	if(hasMaterial)
+	if (hasMaterial)
 		pModel.Init(filepath.c_str(), pDevice, pContext);
 	else
 		pModel.InitNoMtl(filepath.c_str(), pDevice, pContext);
@@ -57,19 +70,63 @@ bool GameObject::Init(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, std:
 	HRESULT hr = pDevice->CreateSamplerState(&sampler_desc, &st);
 	if (FAILED(hr)) { Error::Log(hr, "Failed to create sampler state"); }
 
+	CD3D11_SAMPLER_DESC pcfDesc(D3D11_DEFAULT);
+	pcfDesc.Filter = D3D11_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR;
+	pcfDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+	pcfDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+	pcfDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+	pcfDesc.ComparisonFunc = D3D11_COMPARISON_LESS;
+	pcfDesc.BorderColor[0] = 1.0f;
+	pcfDesc.BorderColor[1] = 1.0f;
+	pcfDesc.BorderColor[2] = 1.0f;
+	pcfDesc.BorderColor[3] = 1.0f;
+	hr = pDevice->CreateSamplerState(&pcfDesc, &pcfSam);
+	if (FAILED(hr)) { Error::Log(hr, "Failed to create sampler state"); }
+
+	D3D11_SAMPLER_DESC samplerDesc = CD3D11_SAMPLER_DESC{ CD3D11_DEFAULT{} };
+	samplerDesc.Filter = D3D11_FILTER_ANISOTROPIC;
+	samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
+	samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_BORDER;
+	samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
+	samplerDesc.MipLODBias = 0.0f;
+	samplerDesc.MaxAnisotropy = 4;
+	samplerDesc.ComparisonFunc = D3D11_COMPARISON_ALWAYS;
+	samplerDesc.BorderColor[0] = 0;
+	samplerDesc.BorderColor[1] = 0;
+	samplerDesc.BorderColor[2] = 0;
+	samplerDesc.BorderColor[3] = 0;
+	samplerDesc.MinLOD = 0;
+	samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+	hr = pDevice->CreateSamplerState(&samplerDesc, &ssam);
+	if (FAILED(hr)) { Error::Log(hr, "Failed to create sampler state"); }
+
 	//create pasteurizer 
 	CD3D11_RASTERIZER_DESC pRasterizerDesc(D3D11_DEFAULT);
 	pRasterizerDesc.FillMode = D3D11_FILL_SOLID;
 	pRasterizerDesc.CullMode = D3D11_CULL_NONE;
 	hr = pDevice->CreateRasterizerState(&pRasterizerDesc, &pRasterizer);
-	if (FAILED(hr)) { Error::Log(hr, "Failed to create pasteurizer state"); return false; }
+	if (FAILED(hr)) { Error::Log(hr, "Failed to create pasteurizer state"); }
+
+	//create pasteurizer 
+	CD3D11_RASTERIZER_DESC pRasterizerDescBack(D3D11_DEFAULT);
+	pRasterizerDesc.FillMode = D3D11_FILL_SOLID;
+	pRasterizerDesc.CullMode = D3D11_CULL_BACK;
+	hr = pDevice->CreateRasterizerState(&pRasterizerDescBack, &pRasterizerBack);
+	if (FAILED(hr)) { Error::Log(hr, "Failed to create pasteurizer state"); }
+
+	//create pasteurizer 
+	CD3D11_RASTERIZER_DESC pRasterizerDescFront(D3D11_DEFAULT);
+	pRasterizerDescFront.FillMode = D3D11_FILL_SOLID;
+	pRasterizerDescFront.CullMode = D3D11_CULL_FRONT;
+	hr = pDevice->CreateRasterizerState(&pRasterizerDescFront, &pRasterizerFront);
+	if (FAILED(hr)) { Error::Log(hr, "Failed to create pasteurizer state"); }
 
 	//create pasteurizer description 
 	CD3D11_RASTERIZER_DESC pRasterizerDescWireframe(D3D11_DEFAULT);
 	pRasterizerDescWireframe.FillMode = D3D11_FILL_WIREFRAME;
 	pRasterizerDescWireframe.CullMode = D3D11_CULL_NONE;
 	hr = pDevice->CreateRasterizerState(&pRasterizerDescWireframe, &pRasterizerWireframe);
-	if (FAILED(hr)) { Error::Log(hr, "Failed to create pasteurizer state"); return false; }
+	if (FAILED(hr)) { Error::Log(hr, "Failed to create pasteurizer state"); }
 
 	//matrices constant buffer initialize
 	matrices_buffer = std::make_unique<CBuffer<matrices>>();
@@ -77,11 +134,8 @@ bool GameObject::Init(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, std:
 
 	//Filters Initialize
 	pDepthBuffer.Init(pDevice, pContext);
-	pBlur.Init(pDevice, pContext, width, height);
 	pWireframe.Init(pDevice, pContext);
 	pFog.Init(pDevice, pContext);
-
-    return true;
 }
 
 bool GameObject::HasNormal() const
@@ -96,12 +150,6 @@ bool* GameObject::GetDepthBufferEnabled()
 	return &depthEnabled;
 }
 
-bool* GameObject::GetBlurEnabled()
-{
-	//if blur filter is enabled return true else return false
-	return &blurEnabled;
-}
-
 bool* GameObject::GetWireframeEnabled()
 {
 	//if wireframe filter is enabled than return true else return false
@@ -112,6 +160,16 @@ bool* GameObject::GetFogEnabled()
 {
 	//if fog filter is enabled than return true else return false
 	return &fogEnabled;
+}
+
+bool* GameObject::GetBackCulling()
+{
+	return &backfaceCulling;
+}
+
+bool* GameObject::GetFrontCulling()
+{
+	return &frontfaceCulling;
 }
 
 XMFLOAT3* GameObject::GetWireColor()
@@ -144,12 +202,6 @@ bool GameObject::SetDepthBufferEnabled(bool value)
 	return depthEnabled = value;
 }
 
-bool GameObject::SetBlurEnabled(bool value)
-{
-	//set blur enabled to value
-	return blurEnabled = value;
-}
-
 bool GameObject::SetFogEnabled(bool value)
 {
 	//set fog enabled to value
@@ -160,6 +212,16 @@ bool GameObject::SetWireframeEnabled(bool value)
 {
 	//set wireframe enabled to value
 	return wireframeEnabled = value;
+}
+
+bool GameObject::SetFrontCull(bool value)
+{
+	return frontCull = value;
+}
+
+bool GameObject::SetBackCull(bool value)
+{
+	return backfaceCulling = value;
 }
 
 float GameObject::SetFogStart(float value)
@@ -174,13 +236,39 @@ float GameObject::SetFogEnd(float value)
 	return Fog::SetFogEnd(value);
 }
 
-void GameObject::Draw(Camera3D cam)
+std::string GameObject::GetName() const
 {
-	//bind rasterizers
-	pContext->RSSetState(pRasterizer.Get());
+	return directory.substr(directory.find_last_of("\\") + 1);
+}
 
+bool& GameObject::GetIsDestroyed() const
+{
+	return isDestroyed;
+}
+
+void GameObject::draw(Camera3D cam)
+{
+	pContext->RSSetState(pRasterizerFront.Get());
+	if (!frontCull)
+	{
+		//bind rasterizers
+		pContext->RSSetState(pRasterizer.Get());
+		if (backfaceCulling)
+			pContext->RSSetState(pRasterizerBack.Get());
+		else if (frontfaceCulling)
+			pContext->RSSetState(pRasterizerFront.Get());
+	}
 	//bind sampler
 	pContext->PSSetSamplers(0u, 1u, st.GetAddressOf());
+	pContext->PSSetSamplers(1u, 1u, ssam.GetAddressOf());
+	pContext->PSSetSamplers(2u, 1u, pcfSam.GetAddressOf());
+	//if model has not any textures then bind no texture shaders
+	if (!pModel.GetHasTexture())
+	{
+		pLayout->Bind(pContext);
+		pVSLit.Bind(pContext);
+		pPSLit.Bind(pContext);
+	}
 	//if model not has normal texture and just set shaders
 	if (!pModel.GetHasNormal())
 	{
@@ -195,10 +283,23 @@ void GameObject::Draw(Camera3D cam)
 		pVSNormal.Bind(pContext);
 		pPSNormal.Bind(pContext);
 	}
+	//if model has a emessive map and set emssive shaders
+	if (pModel.GetHasEmessive())
+	{
+		pVSEmessive.Bind(pContext);
+		pPSEmessive.Bind(pContext);
+	}
+	//if model has a parallax map and set parallax shaders
+	if (pModel.GetHasParallaxMap())
+	{
+		pVSParallax.Bind(pContext);
+		pPSParallax.Bind(pContext);
+	}
 
 	//Classic Object UI Creation
-	ui->ClassicUI(&pModel, directory.substr(directory.find_last_of("\\") + 1), pos, rot, scale);
-	if (is_rendered)
+	ui->ClassicUI(this, directory.substr(directory.find_last_of("\\") + 1), pos, rot, scale,
+		isDestroyed);
+	if (isRendered)
 	matrices_buffer->data.camera_pos = cam.GetPositionFloat3();
 	matrices_buffer->MapData();
 	matrices_buffer->VSBind(pContext, 1u, 1u);
@@ -206,16 +307,12 @@ void GameObject::Draw(Camera3D cam)
 	//if depth checkbox true draw depth buffer filter
 	if (depthEnabled)
 	{
+		cam.SetProjectionValues(70.0f, static_cast<float>(width) / static_cast<float>(height)
+			, 100.0f, 999999.0f, false);
 		pDepthBuffer.Draw();
 	}
 
-	//if blur checkbox is true than draw blur filter
-	if (blurEnabled)
-	{
-		pBlur.Draw();
-	}
-
-	//if wireframe checkbox is true than draw wireframe filter
+	//if wire frame checkbox is true than draw wire frame filter
 	if (wireframeEnabled)
 	{
 		pContext->RSSetState(pRasterizerWireframe.Get());
@@ -227,10 +324,15 @@ void GameObject::Draw(Camera3D cam)
 	{
 		pFog.Draw();
 	}
-
 	//Render Model
 	pModel.Render(cam);
-	is_rendered = true;
+	isRendered = true;
+}
+
+void GameObject::Destroy() const noexcept
+{
+	pModel.Destroy();
+	isDestroyed = true;
 }
 
 Model* GameObject::GetMesh()

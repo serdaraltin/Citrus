@@ -8,8 +8,8 @@ template<class T>
 class CBuffer
 {
 public:
-	CBuffer() {}
-	~CBuffer() {}
+	CBuffer() {};
+	~CBuffer() {};
 private:
 	wrl::ComPtr<ID3D11Buffer> cb;
 	wrl::ComPtr<ID3D11DeviceContext> pContext;
@@ -41,7 +41,7 @@ public:
 		desc.MiscFlags = 0;
 		desc.ByteWidth = static_cast<UINT>(sizeof(T) + (16 - (sizeof(T) % 16)));
 		desc.StructureByteStride = 0;
-		HRESULT hr = device->CreateBuffer(&desc, 0, cb.GetAddressOf());
+		const HRESULT hr = device->CreateBuffer(&desc, nullptr, cb.GetAddressOf());
 		return hr;
 	}
 
@@ -64,5 +64,15 @@ public:
 	void PSBind(ID3D11DeviceContext* pContext, UINT slot, UINT numBuffers)
 	{
 		pContext->PSSetConstantBuffers(slot, numBuffers, cb.GetAddressOf());
+	}
+
+	void HSBind(ID3D11DeviceContext* pContext, UINT slot, UINT numBuffers)
+	{
+		pContext->HSSetConstantBuffers(slot, numBuffers, cb.GetAddressOf());
+	}
+
+	void DSBind(ID3D11DeviceContext* pContext, UINT slot, UINT numBuffers)
+	{
+		pContext->DSSetConstantBuffers(slot, numBuffers, cb.GetAddressOf());
 	}
 };

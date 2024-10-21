@@ -16,8 +16,8 @@ void SkyBox::Init(ID3D11Device* pDevice, ID3D11DeviceContext* pContext)
 	};
 	pLayout = std::make_unique<InputLayout>(pDevice, skybox_ied, &pVS);
 	//Create a skybox texture
-	pTexture = std::make_unique<Texture>(pDevice, pContext, "Images\\SkyBox.png");
-	//init sphere model for spherical skybox
+	pTexture = std::make_unique<Texture>(pDevice, pContext, "Images\\spruit_sunrise_4k.hdr");
+	//init sphere model for spherical sky box
 	sphere.InitNoMtl("Models\\sphere_hq.obj", pDevice, pContext);
 
 	//create pasteurizer
@@ -49,4 +49,9 @@ void SkyBox::SetPos(XMFLOAT3 pos, float deltaTime)
 {
 	//set sky box to reference pos value and multiply with deltaTime
 	sphere.SetPos(pos.x * 0.0001f, pos.y * 0.0001f, pos.z * 0.0001f);
+}
+
+void SkyBox::AdjustRot(float x, float y, float z)
+{
+	sphere.AdjustRot(x, y, z);
 }

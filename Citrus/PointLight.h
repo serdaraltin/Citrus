@@ -13,6 +13,10 @@ struct Light
 	float ambientIntensity;
 	BOOL normalMappingEnabled;
 	float specularIntensity;
+	BOOL reflectionEnabled;
+	float reflectionIntensity;
+	XMFLOAT3 lightColor;
+	float pad[2];
 };
 
 struct LightSpec
@@ -21,31 +25,32 @@ struct LightSpec
 	float lightIntensity;
 	float ambientIntensity;
 	float specularIntensity;
-	float pad[2];
+	BOOL reflectionEnabled;
+	float pad;
 };
 
 class PointLight
 {
 public:
 	PointLight() = default;
-	bool Init(ID3D11Device* device, ID3D11DeviceContext* context);
+	bool Init(ID3D11Device* device, ID3D11DeviceContext* context, int width, int height);
 	void Draw(Camera3D cam);
 	void BindCB() const;
 	void BindCBSpec() const;
 	~PointLight() = default;
 public:
 	static float GetAmbientIntensity();
-	static float SetAmbientIntensity(float value);
 	static float GetDiffuseIntensity();
-	static float SetDiffuseIntensity(float value);
 	static float GetSpecularIntensity();
-	static float SetSpecularIntensity(float value);
+	static float GetReflectionIntensity();
 	static float GetObjectPositionX();
 	static float GetObjectPositionY();
 	static float GetObjectPositionZ();
-	void SetObjectPosition(float x, float y, float z);
+	static XMFLOAT3 GetLightColor();
+	void SetObjectPosition(const float x, const float y, const float z);
 	static BOOL GetNormalMapEnabled();
-	static BOOL SetNormalMapEnabled(BOOL value);
+	static BOOL GetReflectionEnabled();
+	Camera3D GetLightCamera();
 public:
 	mutable SaveSystem pointLightSetting;
 	mutable std::vector<std::string> pPointLightSavedItems;
@@ -53,6 +58,7 @@ private:
 	Model lightmodel;
 	VertexShader vs;
 	PixelShader ps;
+	Camera3D lightCam;
 	std::unique_ptr<InputLayout> il;
 	std::unique_ptr<Texture> tex;
 	std::unique_ptr<UI> ui;

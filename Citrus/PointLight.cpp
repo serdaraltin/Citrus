@@ -6,9 +6,12 @@ static float Sscale[3] = { 10.0f, 10.0f, 10.0f };
 static float diffuseIntensity = 1.0f;
 static float ambientIntensity = 0.6f;
 static float specularIntensity = 1.0f;
+static float reflectionIntensity = 14.0f;
+static XMFLOAT3 lightColor = XMFLOAT3(1.0f, 1.0f, 1.0f);
 static BOOL normalMappingEnabled = TRUE;
+static BOOL reflectionEnabled = FALSE;
 
-bool PointLight::Init(ID3D11Device* device, ID3D11DeviceContext* context)
+bool PointLight::Init(ID3D11Device* device, ID3D11DeviceContext* context, int width, int height)
 {
 	this->device = device;
 	this->context = context;
@@ -39,22 +42,34 @@ bool PointLight::Init(ID3D11Device* device, ID3D11DeviceContext* context)
 
 	//set point light saved values
 	pointLightSetting.OpenFileRead("pointlight_settings.txt");
-	ambientIntensity = float(std::atoi(pointLightSetting.GetInfo(0).c_str()));
-	diffuseIntensity = float(std::atoi(pointLightSetting.GetInfo(1).c_str()));
-	specularIntensity = float(std::atoi(pointLightSetting.GetInfo(2).c_str()));
-	lightmodel.SetPos(float(std::atoi(pointLightSetting.GetInfo(3).c_str())), float(std::atoi(pointLightSetting.GetInfo(4).c_str())),
-		float(std::atoi(pointLightSetting.GetInfo(5).c_str())));
-	if (pointLightSetting.GetInfo(6) == "1")
+	ambientIntensity = static_cast<float>(std::atoi(pointLightSetting.GetInfo(0).c_str()));
+	diffuseIntensity = static_cast<float>(std::atoi(pointLightSetting.GetInfo(1).c_str()));
+	specularIntensity = static_cast<float>(std::atoi(pointLightSetting.GetInfo(2).c_str()));
+	reflectionIntensity = static_cast<float>(std::atoi(pointLightSetting.GetInfo(3).c_str()));
+	lightmodel.SetPos(static_cast<float>(std::atoi(pointLightSetting.GetInfo(4).c_str())), static_cast<float>(std::atoi(pointLightSetting.GetInfo(5).c_str())),
+		static_cast<float>(std::atoi(pointLightSetting.GetInfo(6).c_str())));
+	if (pointLightSetting.GetInfo(7) == "1")
 		normalMappingEnabled = TRUE;
 	else
 		normalMappingEnabled = FALSE;
+	if (pointLightSetting.GetInfo(8) == "1")
+		reflectionEnabled = TRUE;
+	else
+		reflectionEnabled = FALSE;
 	pointLightSetting.CloseFile();
+
+	lightCam.SetPosition(lightmodel.GetPos().x, lightmodel.GetPos().y, lightmodel.GetPos().z);
+	lightCam.SetRotation(lightmodel.GetRot().x, lightmodel.GetRot().y, lightmodel.GetRot().z);
+	//Light camera 3d
+	lightCam.SetProjectionValues(70.0f, static_cast<float>(width) / static_cast<float>(height), 100.0f, 9999.0f, false);
 
     return true;
 }
 
 void PointLight::Draw(Camera3D cam)
 {
+	lightCam.SetPosition(lightmodel.GetPos().x, lightmodel.GetPos().y, lightmodel.GetPos().z);
+	lightCam.SetRotation(lightmodel.GetRot().x, lightmodel.GetRot().y, lightmodel.GetRot().z);
 	il->Bind(context);	//input layout bind
 	vs.Bind(context);	//vertex shader bind
 	ps.Bind(context);	//pixel shader bind
@@ -64,15 +79,19 @@ void PointLight::Draw(Camera3D cam)
 	cblight->data.ambientIntensity = ambientIntensity;	//constant buffer initialize
 	cblight->data.normalMappingEnabled = normalMappingEnabled;	//constant buffer initialize
 	cblight->data.specularIntensity = specularIntensity;	//constant buffer initialize
+	cblight->data.reflectionEnabled = reflectionEnabled;	//constant buffer initialize
+	cblight->data.reflectionIntensity = reflectionIntensity;	//constant buffer initialize
+	cblight->data.lightColor = lightColor;	//constant buffer initialize
 	cblight->MapData();	//apply data
 	cblightspec->data.lightpos = lightmodel.GetPos();
 	cblightspec->data.lightIntensity = diffuseIntensity;
 	cblightspec->data.ambientIntensity = ambientIntensity;
 	cblightspec->data.specularIntensity = specularIntensity;
+	cblightspec->data.reflectionEnabled = reflectionEnabled;
 	cblight->MapData();
 	//point light ui creation
 	ui->PointLight(&lightmodel, "Point Light", Spos, Srot, Sscale, &diffuseIntensity, &ambientIntensity, &normalMappingEnabled,
-		&specularIntensity);
+		&specularIntensity, &reflectionEnabled, &reflectionIntensity, &lightColor);
 	//model render
 	lightmodel.Render(cam);
 }
@@ -92,19 +111,9 @@ float PointLight::GetAmbientIntensity()
 	return ambientIntensity; //return ambient intensity
 }
 
-float PointLight::SetAmbientIntensity(float value)
-{
-	return ambientIntensity = value;	//set ambient intensity to value
-}
-
 float PointLight::GetDiffuseIntensity()
 {
 	return diffuseIntensity;	//return diffuse intenisty
-}
-
-float PointLight::SetDiffuseIntensity(float value)
-{
-	return diffuseIntensity = value;	//set diffuse intensity to value
 }
 
 float PointLight::GetSpecularIntensity()
@@ -112,9 +121,9 @@ float PointLight::GetSpecularIntensity()
 	return specularIntensity;	//return specular intensity
 }
 
-float PointLight::SetSpecularIntensity(float value)
+float PointLight::GetReflectionIntensity()
 {
-	return specularIntensity = value;	//set specular intensity to value
+	return reflectionIntensity;
 }
 
 float PointLight::GetObjectPositionX()
@@ -132,9 +141,14 @@ float PointLight::GetObjectPositionZ()
 	return Spos[0]; //return object z position
 }
 
-void PointLight::SetObjectPosition(float x, float y, float z)
+XMFLOAT3 PointLight::GetLightColor()
 {
-	lightmodel.SetPos(x, y, z);
+	return lightColor;
+}
+
+void PointLight::SetObjectPosition(const float x, const float y, const float z)
+{
+	lightmodel.SetPos(x, y, z);	//set object position to reference x,y,z
 }
 
 BOOL PointLight::GetNormalMapEnabled()
@@ -142,7 +156,12 @@ BOOL PointLight::GetNormalMapEnabled()
 	return normalMappingEnabled;	//return normal mapping enabled as a BOOL (win32 boolean)
 }
 
-BOOL PointLight::SetNormalMapEnabled(BOOL value)
+BOOL PointLight::GetReflectionEnabled()
 {
-	return normalMappingEnabled = value;	//set normal mapping to reference value
+	return reflectionEnabled;
+}
+
+Camera3D PointLight::GetLightCamera()
+{
+	return lightCam;
 }

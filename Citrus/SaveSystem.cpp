@@ -18,7 +18,7 @@ void SaveSystem::AddInfo(std::vector<std::string> elements)
 	if (pFile.is_open()) {
 		for (int i = 0; i < elements.size(); i++)
 		{
-			pFile << elements[i] + "\n";
+			pFile << elements[i] << std::endl;
 		}
 	}
 }
@@ -28,7 +28,8 @@ std::string SaveSystem::GetInfo(int line)
 	//create data string
 	std::string data;
 	data = std::to_string(line); //set data value to line number
-	std::getline(pFile, data); 	//get data from refernce line
+	std::getline(pFile, data); 	//get data from reference line
+	data = data.substr(data.find_last_of(":") + 1);
 	return data; //return the data
 }
 
@@ -36,4 +37,9 @@ void SaveSystem::CloseFile()
 {
 	//close the file
 	pFile.close();
+}
+
+std::fstream& SaveSystem::GetFile() noexcept
+{
+	return pFile;
 }
